@@ -70,6 +70,14 @@ CREATE TABLE IF NOT EXISTS group_day_tracker (
   group_id INTEGER PRIMARY KEY REFERENCES groups(id),
   current_day INTEGER NOT NULL DEFAULT 1
 );
+
+CREATE TABLE IF NOT EXISTS comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  daily_question_id INTEGER REFERENCES daily_questions(id),
+  user_id INTEGER REFERENCES users(id),
+  text TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 `);
 
 // Migration: add columns to existing questions table if missing

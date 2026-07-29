@@ -16,9 +16,43 @@ const requireAuth = (req, res, next) => {
 
 router.use(requireAuth);
 
+const requireAnsweredToday = (req, res, next) => {
+    const groupId = req.params.id;
+    const tracker = db.prepare('SELECT current_day FROM group_day_tracker WHERE group_id = ?').get(groupId);
+    if (!tracker) return res.status(404).json({ error: 'Group not found' });
+    
+    const dailyQuestion = db.prepare(`
+        SELECT dq.id, q.type FROM daily_questions dq
+        JOIN questions q ON dq.question_id = q.id
+        WHERE dq.group_id = ? AND dq.day_number = ?
+    `).get(groupId, tracker.current_day);
+
+    if (!dailyQuestion) return res.status(404).json({ error: 'No daily question' });
+
+    let hasVoted = false;
+    if (dailyQuestion.type === 'vote') {
+        const vote = db.prepare('SELECT 1 FROM votes WHERE daily_question_id = ? AND voter_id = ?')
+            .get(dailyQuestion.id, req.session.userId);
+        hasVoted = !!vote;
+    } else {
+        const answer = db.prepare('SELECT 1 FROM answers WHERE daily_question_id = ? AND user_id = ?')
+            .get(dailyQuestion.id, req.session.userId);
+        hasVoted = !!answer;
+    }
+
+    if (!hasVoted) {
+        return res.status(403).json({ error: "You must answer today's question first." });
+    }
+    
+    next();
+};
+
+
 const assignDailyQuestion = (groupId, dayNumber) => {
-    const today = new Date();
-    const isJuly31 = today.getDate() === 31 && today.getMonth() === 6; // month is 0-indexed (6 = July)
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Berlin', month: 'numeric', day: 'numeric' }).formatToParts(new Date());
+    const month = parseInt(parts.find(p => p.type === 'month').value, 10);
+    const day = parseInt(parts.find(p => p.type === 'day').value, 10);
+    const isJuly31 = month === 7 && day === 31;
     
     let specialQuestionId = null;
 
@@ -222,7 +256,7 @@ router.post('/answer', (req, res) => {
 
 // ── Skip day ──────────────────────────────────────────────────
 
-router.post('/skip-day', (req, res) => {
+router.post('/skip-day', requireAnsweredToday, (req, res) => {
     const groupId = req.params.id;
     
     // Only the group creator (admin) can skip
@@ -248,7 +282,7 @@ router.post('/skip-day', (req, res) => {
 
 // ── History ───────────────────────────────────────────────────
 
-router.get('/history', (req, res) => {
+router.get('/history', requireAnsweredToday, (req, res) => {
     const groupId = req.params.id;
     const tracker = db.prepare('SELECT current_day FROM group_day_tracker WHERE group_id = ?').get(groupId);
     if (!tracker) return res.status(404).json({ error: 'Group not found' });
@@ -317,7 +351,7 @@ router.get('/history', (req, res) => {
 // ── Custom Questions CRUD ─────────────────────────────────────
 
 // List custom questions for this group (only the ones created by current user)
-router.get('/custom-questions', (req, res) => {
+router.get('/custom-questions', requireAnsweredToday, (req, res) => {
     const groupId = req.params.id;
     const questions = db.prepare(`
         SELECT q.id, q.text, q.type, q.created_by, u.username as created_by_name
@@ -334,7 +368,7 @@ router.get('/custom-questions', (req, res) => {
 });
 
 // Create a custom question
-router.post('/custom-questions', (req, res) => {
+router.post('/custom-questions', requireAnsweredToday, (req, res) => {
     const groupId = req.params.id;
     const { text, type } = req.body;
     
@@ -355,7 +389,7 @@ router.post('/custom-questions', (req, res) => {
 });
 
 // Edit a custom question (only owner)
-router.put('/custom-questions/:qid', (req, res) => {
+router.put('/custom-questions/:qid', requireAnsweredToday, (req, res) => {
     const { qid } = req.params;
     const groupId = req.params.id;
     const { text, type } = req.body;
@@ -383,7 +417,7 @@ router.put('/custom-questions/:qid', (req, res) => {
 });
 
 // Delete a custom question (only owner)
-router.delete('/custom-questions/:qid', (req, res) => {
+router.delete('/custom-questions/:qid', requireAnsweredToday, (req, res) => {
     const { qid } = req.params;
     const groupId = req.params.id;
 
@@ -400,6 +434,52 @@ router.delete('/custom-questions/:qid', (req, res) => {
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Failed to delete question' });
+    }
+});
+
+// ── Comments ──────────────────────────────────────────────────
+
+router.get('/comments/:dqid', requireAnsweredToday, (req, res) => {
+    const { dqid } = req.params;
+    
+    // Ensure the daily question belongs to the group
+    const dq = db.prepare('SELECT id FROM daily_questions WHERE id = ? AND group_id = ?').get(dqid, req.params.id);
+    if (!dq) return res.status(404).json({ error: 'Daily question not found' });
+
+    const comments = db.prepare(`
+        SELECT c.id, c.text, c.created_at, u.id as user_id, u.username, u.avatar_url
+        FROM comments c
+        JOIN users u ON c.user_id = u.id
+        WHERE c.daily_question_id = ?
+        ORDER BY c.created_at ASC
+    `).all(dqid);
+
+    res.json(comments);
+});
+
+router.post('/comments/:dqid', requireAnsweredToday, (req, res) => {
+    const { dqid } = req.params;
+    const { text } = req.body;
+    
+    if (!text || !text.trim()) return res.status(400).json({ error: 'Comment text is required' });
+
+    const dq = db.prepare('SELECT id FROM daily_questions WHERE id = ? AND group_id = ?').get(dqid, req.params.id);
+    if (!dq) return res.status(404).json({ error: 'Daily question not found' });
+
+    try {
+        const result = db.prepare('INSERT INTO comments (daily_question_id, user_id, text) VALUES (?, ?, ?)')
+            .run(dqid, req.session.userId, text.trim());
+            
+        const comment = db.prepare(`
+            SELECT c.id, c.text, c.created_at, u.id as user_id, u.username, u.avatar_url
+            FROM comments c
+            JOIN users u ON c.user_id = u.id
+            WHERE c.id = ?
+        `).get(result.lastInsertRowid);
+        
+        res.json(comment);
+    } catch (err) {
+        res.status(500).json({ error: 'Server error' });
     }
 });
 

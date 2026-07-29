@@ -4,6 +4,7 @@ import Navbar from '../components/Navbar';
 import MemberBadge from '../components/MemberBadge';
 import VoteResults from '../components/VoteResults';
 import CustomQuestions from '../components/CustomQuestions';
+import Comments from '../components/Comments';
 import { api } from '../api';
 import { AuthContext } from '../context/AuthContext';
 
@@ -20,25 +21,41 @@ export default function Group() {
   const [openAnswer, setOpenAnswer] = useState('');
   const [copied, setCopied] = useState(false);
   const [showCustom, setShowCustom] = useState(false);
+  const [history, setHistory] = useState([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
 
-  const fetchData = async () => {
+  const fetchData = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const groupData = await api(`/api/groups/${id}`);
       setGroup(groupData);
       
       const today = await api(`/api/groups/${id}/today`);
       setTodayData(today);
+      if (today.hasVoted) {
+        const historyData = await api(`/api/groups/${id}/history`);
+        setHistory(historyData);
+      }
     } catch (err) {
-      setError(err.message);
+      if (!silent) setError(err.message);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchData();
   }, [id]);
+
+  useEffect(() => {
+    if (!todayData?.hasVoted) return;
+
+    const interval = setInterval(() => {
+      fetchData(true);
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [id, todayData?.hasVoted]);
 
   const handleVote = async (votedForId) => {
     setActionLoading(true);
@@ -93,12 +110,16 @@ export default function Group() {
     }
   };
 
-  const dq = todayData?.dailyQuestion;
+  const isHistoryView = historyIndex !== -1;
+  const dq = isHistoryView ? history[historyIndex] : todayData?.dailyQuestion;
   const questionType = dq?.type;
   const dayNumber = dq?.day_number || 1;
   const todayStr = new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  const dayLabel = dayNumber === 1 ? todayStr : `${todayStr}, ${dayNumber}. Frage`;
+  const dayLabel = dayNumber === 1 ? todayStr : `${todayStr}, Question ${dayNumber}`;
   const isAdmin = user && group && group.created_by === user.id;
+
+  const currentHasVoted = isHistoryView ? true : todayData?.hasVoted;
+  const currentResults = isHistoryView ? history[historyIndex].results : todayData?.results;
 
   if (loading) {
     return <><Navbar /><div className="layout" style={{ display: 'flex', justifyContent: 'center', marginTop: '100px' }}><div className="spinner"></div></div></>;
@@ -173,28 +194,76 @@ export default function Group() {
 
         {dq && (
           <div className="card animate-in" style={{ animationDelay: '0.1s' }}>
+            {todayData?.hasVoted && (
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between', 
+                paddingBottom: '16px', 
+                marginBottom: '16px', 
+                borderBottom: '1px solid var(--card-border)' 
+              }}>
+                <button 
+                  onClick={() => setHistoryIndex(i => Math.min(i + 1, history.length - 1))}
+                  disabled={historyIndex >= history.length - 1}
+                  className="btn-secondary"
+                  style={{ width: 'auto', padding: '6px 12px', fontSize: '0.85rem' }}
+                  title="Previous question"
+                >
+                  ◀ Previous
+                </button>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-secondary)' }}>
+                    {isHistoryView ? `Question ${dq.day_number}` : `Today (Question ${dq.day_number})`}
+                  </span>
+                  {isHistoryView && (
+                    <button 
+                      onClick={() => setHistoryIndex(-1)}
+                      style={{ width: 'auto', padding: '4px 10px', fontSize: '0.75rem', borderRadius: '12px' }}
+                    >
+                      🎯 Back to Today
+                    </button>
+                  )}
+                </div>
+
+                <button 
+                  onClick={() => setHistoryIndex(i => Math.max(i - 1, -1))}
+                  disabled={historyIndex === -1}
+                  className="btn-secondary"
+                  style={{ width: 'auto', padding: '6px 12px', fontSize: '0.85rem' }}
+                  title="Next question"
+                >
+                  Next ▶
+                </button>
+              </div>
+            )}
+
             <h2 className="gradient-text" style={{ fontSize: '2rem', textAlign: 'center', margin: '24px 0 40px', lineHeight: 1.3 }}>
               {dq.text}
             </h2>
 
-            {todayData.hasVoted ? (
+            {currentHasVoted ? (
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginBottom: '24px' }}>
                   <h3 style={{ color: 'var(--success)', margin: 0 }}>Results are in! 🎉</h3>
-                  <button
-                    onClick={fetchData}
-                    className="btn-secondary"
-                    style={{ width: '36px', height: '36px', padding: 0, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}
-                    title="Refresh answers"
-                  >
-                    🔄
-                  </button>
+                  {!isHistoryView && (
+                    <button
+                      onClick={fetchData}
+                      className="btn-secondary"
+                      style={{ width: '36px', height: '36px', padding: 0, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}
+                      title="Refresh answers"
+                    >
+                      🔄
+                    </button>
+                  )}
                 </div>
                 <VoteResults 
-                  results={todayData.results} 
+                  results={currentResults} 
                   type={questionType} 
                   members={group?.members}
                 />
+                <Comments groupId={id} dailyQuestionId={dq.id} />
               </div>
             ) : (
               <div style={{ maxWidth: '600px', margin: '0 auto' }}>
@@ -244,29 +313,33 @@ export default function Group() {
           </div>
         )}
 
-        <div style={{ marginTop: '48px', display: 'flex', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          <button 
-            onClick={() => setShowCustom(!showCustom)}
-            className="btn-secondary"
-            style={{ width: 'auto', padding: '8px 24px', fontSize: '0.875rem' }}
-          >
-            📝 {showCustom ? 'Hide' : 'Submit'} Questions
-          </button>
-          {isAdmin && (
-            <button 
-              onClick={handleSkipDay}
-              disabled={actionLoading}
-              className="btn-secondary"
-              style={{ width: 'auto', padding: '8px 24px', fontSize: '0.875rem', opacity: 0.7 }}
-              title="Admin only: Skip to the next question"
-            >
-              ⏭️ Skip to next day
-            </button>
-          )}
-        </div>
-
-        {showCustom && (
-          <CustomQuestions groupId={id} onClose={() => setShowCustom(false)} />
+        {todayData?.hasVoted && (
+          <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button 
+                onClick={() => setShowCustom(!showCustom)}
+                className="btn-secondary"
+                style={{ width: 'auto', padding: '10px 24px', fontSize: '0.9rem', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+              >
+                📝 {showCustom ? 'Hide Questions' : 'Submit Questions'}
+              </button>
+              {isAdmin && (
+                <button 
+                  onClick={handleSkipDay}
+                  disabled={actionLoading}
+                  className="btn-secondary"
+                  style={{ width: 'auto', padding: '10px 24px', fontSize: '0.9rem', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                  title="Admin feature: Skip to next day"
+                >
+                  ⏭️ Skip to Next Day
+                </button>
+              )}
+            </div>
+            
+            {showCustom && (
+              <CustomQuestions groupId={id} onClose={() => setShowCustom(false)} />
+            )}
+          </div>
         )}
       </div>
     </>
