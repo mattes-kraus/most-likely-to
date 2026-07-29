@@ -207,34 +207,29 @@ export default function Group() {
                   onClick={() => setHistoryIndex(i => Math.min(i + 1, history.length - 1))}
                   disabled={historyIndex >= history.length - 1}
                   className="btn-secondary"
-                  style={{ width: 'auto', padding: '6px 12px', fontSize: '0.85rem' }}
+                  style={{ width: '36px', height: '36px', padding: 0, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', flexShrink: 0 }}
                   title="Previous question"
                 >
-                  ◀ Previous
+                  ◀
                 </button>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-secondary)' }}>
-                    {isHistoryView ? `Question ${dq.day_number}` : `Today (Question ${dq.day_number})`}
-                  </span>
-                  {isHistoryView && (
-                    <button 
-                      onClick={() => setHistoryIndex(-1)}
-                      style={{ width: 'auto', padding: '4px 10px', fontSize: '0.75rem', borderRadius: '12px' }}
-                    >
-                      🎯 Back to Today
-                    </button>
-                  )}
-                </div>
+                {isHistoryView && (
+                  <button 
+                    onClick={() => setHistoryIndex(-1)}
+                    style={{ width: 'auto', padding: '4px 10px', fontSize: '0.75rem', borderRadius: '12px' }}
+                  >
+                    🎯 Back to Today
+                  </button>
+                )}
 
                 <button 
                   onClick={() => setHistoryIndex(i => Math.max(i - 1, -1))}
                   disabled={historyIndex === -1}
                   className="btn-secondary"
-                  style={{ width: 'auto', padding: '6px 12px', fontSize: '0.85rem' }}
+                  style={{ width: '36px', height: '36px', padding: 0, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', flexShrink: 0 }}
                   title="Next question"
                 >
-                  Next ▶
+                  ▶
                 </button>
               </div>
             )}
@@ -245,19 +240,6 @@ export default function Group() {
 
             {currentHasVoted ? (
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginBottom: '24px' }}>
-                  <h3 style={{ color: 'var(--success)', margin: 0 }}>Results are in! 🎉</h3>
-                  {!isHistoryView && (
-                    <button
-                      onClick={fetchData}
-                      className="btn-secondary"
-                      style={{ width: '36px', height: '36px', padding: 0, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}
-                      title="Refresh answers"
-                    >
-                      🔄
-                    </button>
-                  )}
-                </div>
                 <VoteResults 
                   results={currentResults} 
                   type={questionType} 
