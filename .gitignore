@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# SQLite databases & journal files
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# Uploaded user content
+server/uploads/
+
+# Build output
+client/dist/
+
+# Environment & secrets
+.env
+.env.local
+.env.production
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor files
+.vscode/
+.idea/
+
+# Notes
+notes.md

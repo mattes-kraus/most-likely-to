@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="MostLikelyTo - The modern way to poll and ask questions in groups." />
+    <title>MostLikelyTo</title>
+    
+    <!-- PWA & Mobile Web App Meta Tags -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#0a0a0f" id="theme-color-meta" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="MostLikelyTo" />
+    <link rel="apple-touch-icon" href="/vite.svg" />
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <script>
+      const theme = localStorage.getItem('theme') || 'girly';
+      document.body.dataset.theme = theme;
+      
+      // Update theme color meta tag based on mode
+      const metaThemeColor = document.getElementById('theme-color-meta');
+      if (theme === 'girly') {
+        metaThemeColor.setAttribute('content', '#fff0f5');
+      } else {
+        metaThemeColor.setAttribute('content', '#0a0a0f');
+      }
+    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

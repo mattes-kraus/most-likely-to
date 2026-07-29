@@ -1,0 +1,20 @@
+{
+  "name": "mostlikelyto",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "node server/index.js",
+    "client": "cd client && npm run dev",
+    "setup": "npm install && cd client && npm install"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "better-sqlite3": "^11.7.0",
+    "concurrently": "^9.1.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "express-session": "^1.18.1",
+    "multer": "^1.4.5-lts.1"
+  }
+}
