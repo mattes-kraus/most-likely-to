@@ -167,7 +167,7 @@ export default function Dashboard() {
         }}>
           <p style={{ marginBottom: '8px' }}>Made with 💜 by Luise and Mattes</p>
           <a 
-            href="https://github.com/mattes-kraus/better-ask-us" 
+            href="https://github.com/mattes-kraus/most-likely-to" 
             target="_blank" 
             rel="noopener noreferrer"
             style={{ 
