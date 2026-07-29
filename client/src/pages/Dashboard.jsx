@@ -32,6 +32,25 @@ export default function Dashboard() {
     fetchGroups();
   }, []);
 
+  // iOS Safari auto-focuses the first input and opens the keyboard.
+  // We aggressively blur any focused input during the first 500ms after mount.
+  useEffect(() => {
+    const blurActive = () => {
+      const el = document.activeElement;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
+        el.blur();
+      }
+    };
+    // Run immediately + on a short interval to catch async iOS focus
+    blurActive();
+    const id = setInterval(blurActive, 50);
+    const timeout = setTimeout(() => clearInterval(id), 500);
+    return () => {
+      clearInterval(id);
+      clearTimeout(timeout);
+    };
+  }, []);
+
   const handleCreateGroup = async (e) => {
     e.preventDefault();
     if (!createName.trim()) return;
@@ -75,14 +94,6 @@ export default function Dashboard() {
     <>
       <Navbar />
       <div className="layout">
-        {/* iOS Safari auto-focuses the first input on page load, opening the keyboard.
-            This invisible dummy absorbs that focus without triggering the keyboard. */}
-        <input
-          aria-hidden="true"
-          readOnly
-          tabIndex={-1}
-          style={{ opacity: 0, height: 0, width: 0, position: 'absolute', pointerEvents: 'none' }}
-        />
         <header className="animate-in" style={{ marginBottom: '40px', marginTop: '20px' }}>
           <h1 style={{ fontSize: '2.5rem', marginBottom: '8px' }}>
             Welcome, <span className="gradient-text">{user?.username}</span>! 👋
