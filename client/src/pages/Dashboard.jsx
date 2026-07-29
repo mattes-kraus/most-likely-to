@@ -14,6 +14,9 @@ export default function Dashboard() {
   const [error, setError] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   const [createdCode, setCreatedCode] = useState('');
+  // iOS Safari auto-focuses the first input and opens the keyboard.
+  // We render inputs as readOnly initially — iOS won't open the keyboard for readOnly inputs.
+  const [iosReady, setIosReady] = useState(false);
   
   const navigate = useNavigate();
 
@@ -32,23 +35,10 @@ export default function Dashboard() {
     fetchGroups();
   }, []);
 
-  // iOS Safari auto-focuses the first input and opens the keyboard.
-  // We aggressively blur any focused input during the first 500ms after mount.
+  // Remove readOnly after a short delay so iOS won't auto-open the keyboard on mount
   useEffect(() => {
-    const blurActive = () => {
-      const el = document.activeElement;
-      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
-        el.blur();
-      }
-    };
-    // Run immediately + on a short interval to catch async iOS focus
-    blurActive();
-    const id = setInterval(blurActive, 50);
-    const timeout = setTimeout(() => clearInterval(id), 500);
-    return () => {
-      clearInterval(id);
-      clearTimeout(timeout);
-    };
+    const timer = setTimeout(() => setIosReady(true), 800);
+    return () => clearTimeout(timer);
   }, []);
 
   const handleCreateGroup = async (e) => {
@@ -116,6 +106,8 @@ export default function Dashboard() {
                 placeholder="Group Name" 
                 value={createName}
                 onChange={e => setCreateName(e.target.value)}
+                readOnly={!iosReady}
+                onFocus={() => setIosReady(true)}
               />
               <button type="submit" disabled={actionLoading || !createName.trim()}>
                 Create
@@ -143,6 +135,8 @@ export default function Dashboard() {
                 value={joinCode}
                 onChange={e => setJoinCode(e.target.value.toUpperCase())}
                 maxLength={6}
+                readOnly={!iosReady}
+                onFocus={() => setIosReady(true)}
                 style={{ textTransform: 'uppercase', letterSpacing: joinCode.length > 0 ? '2px' : 'normal' }}
               />
               <button type="submit" disabled={actionLoading || joinCode.length < 5}>
