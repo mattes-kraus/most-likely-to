@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import MemberBadge from '../components/MemberBadge';
@@ -110,12 +110,38 @@ export default function Group() {
     }
   };
 
+  // Helper: convert UTC datetime from SQLite to Berlin date string
+  const toBerlinDateStr = (utcDatetime) => {
+    if (!utcDatetime) return null;
+    return new Date(utcDatetime.replace(' ', 'T') + 'Z').toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Berlin' });
+  };
+
   const isHistoryView = historyIndex !== -1;
   const dq = isHistoryView ? history[historyIndex] : todayData?.dailyQuestion;
   const questionType = dq?.type;
-  const dayNumber = dq?.day_number || 1;
-  const todayStr = new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  const dayLabel = dayNumber === 1 ? todayStr : `${todayStr}, Question ${dayNumber}`;
+
+  // Build label showing the date of the current question + numbering if multiple on same day
+  const dayLabel = (() => {
+    if (!dq) return '';
+    const dqDate = toBerlinDateStr(dq.created_at);
+    if (!dqDate) return new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    // Combine all known questions (history + today) to find how many share this date
+    const allQuestions = [...history];
+    if (todayData?.dailyQuestion) allQuestions.push(todayData.dailyQuestion);
+
+    const sameDateQuestions = allQuestions
+      .filter(q => toBerlinDateStr(q.created_at) === dqDate)
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+    if (sameDateQuestions.length <= 1) return dqDate;
+
+    // Find position of current question within same-day list using unique id if available
+    const idx = sameDateQuestions.findIndex(q => q.id ? q.id === dq.id : q.day_number === dq.day_number);
+    const position = idx >= 0 ? idx + 1 : 1;
+    return `${dqDate}, Question ${position}`;
+  })();
+
   const isAdmin = user && group && group.created_by === user.id;
 
   const currentHasVoted = isHistoryView ? true : todayData?.hasVoted;

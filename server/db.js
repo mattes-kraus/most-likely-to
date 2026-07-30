@@ -98,4 +98,6 @@ try {
   db.exec(`ALTER TABLE daily_questions ADD COLUMN featured_member_id INTEGER REFERENCES users(id) DEFAULT NULL`);
 } catch (e) { /* column already exists */ }
 
+
+
 module.exports = db;

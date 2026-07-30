@@ -2,6 +2,49 @@ const express = require('express');
 const db = require('../db');
 const router = express.Router({ mergeParams: true });
 
+// Helper: get today's date string in Europe/Berlin timezone (YYYY-MM-DD)
+const getTodayBerlin = () => {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+};
+
+// Convert a UTC datetime string from SQLite to a Berlin date (YYYY-MM-DD)
+const toBerlinDate = (utcDatetime) => {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(utcDatetime.replace(' ', 'T') + 'Z'));
+};
+
+// Ensure there is a daily question for today. If the latest one is from a previous day, advance.
+const ensureTodayQuestion = (groupId) => {
+    const todayStr = getTodayBerlin();
+    
+    // Get the latest daily question for this group
+    const latest = db.prepare(`
+        SELECT dq.day_number, dq.created_at
+        FROM daily_questions dq
+        WHERE dq.group_id = ?
+        ORDER BY dq.day_number DESC
+        LIMIT 1
+    `).get(groupId);
+
+    if (!latest) {
+        // No questions yet — keep current_day as is (will be created on /today)
+        const tracker = db.prepare('SELECT current_day FROM group_day_tracker WHERE group_id = ?').get(groupId);
+        return tracker ? tracker.current_day : null;
+    }
+
+    const latestDate = toBerlinDate(latest.created_at);
+
+    if (latestDate === todayStr) {
+        // Already have a question for today
+        return latest.day_number;
+    }
+
+    // It's a new day — advance
+    const nextDay = latest.day_number + 1;
+    db.prepare('UPDATE group_day_tracker SET current_day = ? WHERE group_id = ?').run(nextDay, groupId);
+    assignDailyQuestion(groupId, nextDay);
+    return nextDay;
+};
+
 const requireAuth = (req, res, next) => {
   if (!req.session.userId) return res.status(401).json({ error: 'Not authenticated' });
   
@@ -18,14 +61,14 @@ router.use(requireAuth);
 
 const requireAnsweredToday = (req, res, next) => {
     const groupId = req.params.id;
-    const tracker = db.prepare('SELECT current_day FROM group_day_tracker WHERE group_id = ?').get(groupId);
-    if (!tracker) return res.status(404).json({ error: 'Group not found' });
+    const currentDay = ensureTodayQuestion(groupId);
+    if (!currentDay) return res.status(404).json({ error: 'Group not found' });
     
     const dailyQuestion = db.prepare(`
         SELECT dq.id, q.type FROM daily_questions dq
         JOIN questions q ON dq.question_id = q.id
         WHERE dq.group_id = ? AND dq.day_number = ?
-    `).get(groupId, tracker.current_day);
+    `).get(groupId, currentDay);
 
     if (!dailyQuestion) return res.status(404).json({ error: 'No daily question' });
 
@@ -114,11 +157,11 @@ const assignDailyQuestion = (groupId, dayNumber) => {
 
 router.get('/today', (req, res) => {
   const groupId = req.params.id;
-  const tracker = db.prepare('SELECT current_day FROM group_day_tracker WHERE group_id = ?').get(groupId);
-  const currentDay = tracker ? tracker.current_day : 1;
+  const currentDay = ensureTodayQuestion(groupId);
+  if (!currentDay) return res.status(404).json({ error: 'Group not found' });
 
   let dailyQuestion = db.prepare(`
-    SELECT dq.id, dq.day_number, q.text, q.type, dq.featured_member_id
+    SELECT dq.id, dq.day_number, dq.created_at, q.text, q.type, dq.featured_member_id
     FROM daily_questions dq
     JOIN questions q ON dq.question_id = q.id
     WHERE dq.group_id = ? AND dq.day_number = ?
@@ -128,7 +171,7 @@ router.get('/today', (req, res) => {
     const newId = assignDailyQuestion(groupId, currentDay);
     if (newId) {
         dailyQuestion = db.prepare(`
-            SELECT dq.id, dq.day_number, q.text, q.type, dq.featured_member_id
+            SELECT dq.id, dq.day_number, dq.created_at, q.text, q.type, dq.featured_member_id
             FROM daily_questions dq
             JOIN questions q ON dq.question_id = q.id
             WHERE dq.id = ?
@@ -205,14 +248,14 @@ router.post('/vote', (req, res) => {
     const { votedForId } = req.body;
     if (!votedForId) return res.status(400).json({ error: 'Missing votedForId' });
 
-    const tracker = db.prepare('SELECT current_day FROM group_day_tracker WHERE group_id = ?').get(groupId);
-    if (!tracker) return res.status(404).json({ error: 'Group not found' });
+    const currentDay = ensureTodayQuestion(groupId);
+    if (!currentDay) return res.status(404).json({ error: 'Group not found' });
     
     const dailyQuestion = db.prepare(`
         SELECT dq.id, q.type FROM daily_questions dq
         JOIN questions q ON dq.question_id = q.id
         WHERE dq.group_id = ? AND dq.day_number = ?
-    `).get(groupId, tracker.current_day);
+    `).get(groupId, currentDay);
 
     if (!dailyQuestion || dailyQuestion.type !== 'vote') return res.status(400).json({ error: 'Invalid question' });
 
@@ -233,14 +276,14 @@ router.post('/answer', (req, res) => {
     const { answerText } = req.body;
     if (!answerText) return res.status(400).json({ error: 'Missing answerText' });
 
-    const tracker = db.prepare('SELECT current_day FROM group_day_tracker WHERE group_id = ?').get(groupId);
-    if (!tracker) return res.status(404).json({ error: 'Group not found' });
+    const currentDay = ensureTodayQuestion(groupId);
+    if (!currentDay) return res.status(404).json({ error: 'Group not found' });
     
     const dailyQuestion = db.prepare(`
         SELECT dq.id, q.type FROM daily_questions dq
         JOIN questions q ON dq.question_id = q.id
         WHERE dq.group_id = ? AND dq.day_number = ?
-    `).get(groupId, tracker.current_day);
+    `).get(groupId, currentDay);
 
     if (!dailyQuestion || dailyQuestion.type !== 'open') return res.status(400).json({ error: 'Invalid question' });
 
@@ -284,16 +327,16 @@ router.post('/skip-day', requireAnsweredToday, (req, res) => {
 
 router.get('/history', requireAnsweredToday, (req, res) => {
     const groupId = req.params.id;
-    const tracker = db.prepare('SELECT current_day FROM group_day_tracker WHERE group_id = ?').get(groupId);
-    if (!tracker) return res.status(404).json({ error: 'Group not found' });
+    const currentDay = ensureTodayQuestion(groupId);
+    if (!currentDay) return res.status(404).json({ error: 'Group not found' });
 
     const pastQuestions = db.prepare(`
-        SELECT dq.id, dq.day_number, q.text, q.type, dq.featured_member_id
+        SELECT dq.id, dq.day_number, dq.created_at, q.text, q.type, dq.featured_member_id
         FROM daily_questions dq
         JOIN questions q ON dq.question_id = q.id
         WHERE dq.group_id = ? AND dq.day_number < ?
         ORDER BY dq.day_number DESC
-    `).all(groupId, tracker.current_day);
+    `).all(groupId, currentDay);
 
     const members = db.prepare(`
         SELECT u.id, u.username, u.avatar_url
@@ -339,6 +382,7 @@ router.get('/history', requireAnsweredToday, (req, res) => {
         return {
             id: dq.id,
             day_number: dq.day_number,
+            created_at: dq.created_at,
             text: questionText,
             type: dq.type,
             results
