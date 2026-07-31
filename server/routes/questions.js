@@ -12,9 +12,11 @@ async function checkAndSendFirstAnswerPush(groupId, dailyQuestionId, userIdExemp
         if (voteCount + answerCount === 1) {
             const user = db.prepare('SELECT username FROM users WHERE id = ?').get(userIdExempt);
             if (!user) return;
+            const group = db.prepare('SELECT name FROM groups WHERE id = ?').get(groupId);
+            const groupName = group ? group.name : 'Most Likely To';
             
             const payload = JSON.stringify({
-              title: 'Jemand war schneller als du!',
+              title: groupName,
               body: `${user.username} hat gerade gespielt!`,
               url: `/groups/${groupId}`
             });
