@@ -78,6 +78,14 @@ CREATE TABLE IF NOT EXISTS comments (
   text TEXT NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER REFERENCES users(id),
+  subscription TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(user_id, subscription)
+);
 `);
 
 // Migration: add columns to existing questions table if missing

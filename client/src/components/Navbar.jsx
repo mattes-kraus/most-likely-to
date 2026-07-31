@@ -25,7 +25,7 @@ export default function Navbar() {
   return (
     <nav className="glass-nav">
       <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <h2 className="gradient-text" style={{ margin: 0, fontSize: '1.5rem' }}>MostLikelyTo</h2>
+        <h2 className="gradient-text" style={{ margin: 0, fontSize: '1.5rem' }}>Dev-MostLikelyTo</h2>
       </Link>
       
       {user && (

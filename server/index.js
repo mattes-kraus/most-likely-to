@@ -49,10 +49,12 @@ app.use(session({
 const authRoutes = require('./routes/auth');
 const groupsRoutes = require('./routes/groups');
 const questionsRoutes = require('./routes/questions');
+const pushRoutes = require('./routes/push');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/groups', groupsRoutes);
 app.use('/api/groups/:id', questionsRoutes);
+app.use('/api/push', pushRoutes);
 
 // Serve static frontend files in production
 app.use(express.static(path.join(__dirname, '../client/dist')));

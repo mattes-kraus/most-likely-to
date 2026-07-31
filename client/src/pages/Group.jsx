@@ -7,6 +7,7 @@ import CustomQuestions from '../components/CustomQuestions';
 import Comments from '../components/Comments';
 import { api } from '../api';
 import { AuthContext } from '../context/AuthContext';
+import { subscribeToPushNotifications } from '../utils/push';
 
 export default function Group() {
   const { id } = useParams();
@@ -107,6 +108,24 @@ export default function Group() {
       navigator.clipboard.writeText(group.code);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleEnablePush = async () => {
+    try {
+      await subscribeToPushNotifications();
+      alert('Push notifications enabled!');
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleTestPush = async () => {
+    try {
+      const res = await api(`/api/push/test/${id}`, { method: 'POST' });
+      alert(`Push sent to ${res.count} users.`);
+    } catch (err) {
+      alert(err.message);
     }
   };
 
@@ -340,6 +359,24 @@ export default function Group() {
                   title="Admin feature: Skip to next day"
                 >
                   ⏭️ Skip to Next Day
+                </button>
+              )}
+              <button 
+                onClick={handleEnablePush}
+                className="btn-secondary"
+                style={{ width: 'auto', padding: '10px 24px', fontSize: '0.9rem', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                title="Enable Push Notifications"
+              >
+                🔔 Enable Notifications
+              </button>
+              {isAdmin && (
+                <button 
+                  onClick={handleTestPush}
+                  className="btn-secondary"
+                  style={{ width: 'auto', padding: '10px 24px', fontSize: '0.9rem', display: 'inline-flex', alignItems: 'center', gap: '8px', border: '1px solid var(--accent)' }}
+                  title="Admin feature: Send test push to group"
+                >
+                  📢 Test Push
                 </button>
               )}
             </div>
