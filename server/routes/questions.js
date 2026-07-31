@@ -1,6 +1,47 @@
 const express = require('express');
 const db = require('../db');
+const { webpush } = require('../pushUtils');
 const router = express.Router({ mergeParams: true });
+
+async function checkAndSendFirstAnswerPush(groupId, dailyQuestionId, userIdExempt) {
+    try {
+        // Check if this was the very first answer for this daily question
+        const voteCount = db.prepare('SELECT COUNT(*) as count FROM votes WHERE daily_question_id = ?').get(dailyQuestionId).count;
+        const answerCount = db.prepare('SELECT COUNT(*) as count FROM answers WHERE daily_question_id = ?').get(dailyQuestionId).count;
+        
+        if (voteCount + answerCount === 1) {
+            const user = db.prepare('SELECT username FROM users WHERE id = ?').get(userIdExempt);
+            if (!user) return;
+            
+            const payload = JSON.stringify({
+              title: 'Jemand war schneller als du!',
+              body: `${user.username} hat gerade gespielt!`,
+              url: `/groups/${groupId}`
+            });
+            
+            const subscriptions = db.prepare(`
+              SELECT ps.subscription, ps.user_id 
+              FROM push_subscriptions ps
+              JOIN group_members gm ON ps.user_id = gm.user_id
+              WHERE gm.group_id = ? AND ps.user_id != ?
+            `).all(groupId, userIdExempt);
+            
+            const sendPromises = subscriptions.map(subRow => {
+              const sub = JSON.parse(subRow.subscription);
+              return webpush.sendNotification(sub, payload).catch(err => {
+                if (err.statusCode === 410 || err.statusCode === 404) {
+                  db.prepare('DELETE FROM push_subscriptions WHERE user_id = ? AND subscription = ?')
+                    .run(subRow.user_id, subRow.subscription);
+                }
+              });
+            });
+            
+            await Promise.allSettled(sendPromises);
+        }
+    } catch (err) {
+        console.error('Error sending push notification:', err);
+    }
+}
 
 // Helper: get today's date string in Europe/Berlin timezone (YYYY-MM-DD)
 const getTodayBerlin = () => {
@@ -262,6 +303,10 @@ router.post('/vote', (req, res) => {
     try {
         db.prepare('INSERT INTO votes (daily_question_id, voter_id, voted_for_id) VALUES (?, ?, ?)')
             .run(dailyQuestion.id, req.session.userId, votedForId);
+            
+        // Trigger push notification asynchronously
+        checkAndSendFirstAnswerPush(groupId, dailyQuestion.id, req.session.userId);
+
         res.json({ success: true });
     } catch (err) {
         if (err.message.includes('UNIQUE')) return res.status(400).json({ error: 'Already voted' });
@@ -290,6 +335,10 @@ router.post('/answer', (req, res) => {
     try {
         db.prepare('INSERT INTO answers (daily_question_id, user_id, answer_text) VALUES (?, ?, ?)')
             .run(dailyQuestion.id, req.session.userId, answerText);
+            
+        // Trigger push notification asynchronously
+        checkAndSendFirstAnswerPush(groupId, dailyQuestion.id, req.session.userId);
+
         res.json({ success: true });
     } catch (err) {
         if (err.message.includes('UNIQUE')) return res.status(400).json({ error: 'Already answered' });
