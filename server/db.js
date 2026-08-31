@@ -109,3 +109,14 @@ try {
 
 
 module.exports = db;
+
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS reset_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER REFERENCES users(id),
+      token TEXT UNIQUE NOT NULL,
+      expires_at DATETIME NOT NULL
+    );
+  `);
+} catch (e) { console.error(e); }
