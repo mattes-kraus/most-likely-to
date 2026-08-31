@@ -16,6 +16,13 @@ export default function Profile() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [pwdError, setPwdError] = useState('');
+  const [pwdSuccess, setPwdSuccess] = useState('');
+  const [savingPwd, setSavingPwd] = useState(false);
+
   const [questions, setQuestions] = useState([]);
   const [loadingQuestions, setLoadingQuestions] = useState(true);
   
@@ -64,6 +71,33 @@ export default function Profile() {
       setError(err.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setPwdError('');
+    setPwdSuccess('');
+
+    if (newPassword !== confirmPassword) {
+      return setPwdError('New passwords do not match');
+    }
+
+    setSavingPwd(true);
+    try {
+      await api('/api/auth/password', {
+        method: 'PUT',
+        body: JSON.stringify({ currentPassword, newPassword })
+      });
+      setPwdSuccess('Password changed successfully!');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setTimeout(() => setPwdSuccess(''), 3000);
+    } catch (err) {
+      setPwdError(err.message);
+    } finally {
+      setSavingPwd(false);
     }
   };
 
@@ -268,6 +302,48 @@ export default function Profile() {
                 </button>
               </form>
             </div>
+          </div>
+
+          {/* Change Password */}
+          <div className="card animate-in" style={{ animationDelay: '0.05s' }}>
+            <h2 style={{ marginBottom: '24px' }}>Change Password</h2>
+            
+            {pwdError && <div className="error-msg">{pwdError}</div>}
+            {pwdSuccess && <div className="success-msg">{pwdSuccess}</div>}
+
+            <form onSubmit={handleChangePassword}>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Current Password</label>
+                <input 
+                  type="password" 
+                  value={currentPassword}
+                  onChange={e => setCurrentPassword(e.target.value)}
+                  required
+                />
+              </div>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>New Password</label>
+                <input 
+                  type="password" 
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  required
+                />
+              </div>
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)' }}>Confirm New Password</label>
+                <input 
+                  type="password" 
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  required
+                />
+              </div>
+              
+              <button type="submit" disabled={savingPwd || !currentPassword || !newPassword || !confirmPassword}>
+                {savingPwd ? <div className="spinner"></div> : 'Change Password'}
+              </button>
+            </form>
           </div>
 
           {/* Custom Questions Overview */}
