@@ -3,6 +3,32 @@ const db = require('../db');
 const { webpush } = require('../pushUtils');
 const router = express.Router({ mergeParams: true });
 
+async function sendPushToGroupMembers(groupId, userIdExempt, payloadObj) {
+    try {
+        const payload = JSON.stringify(payloadObj);
+        const subscriptions = db.prepare(`
+          SELECT ps.subscription, ps.user_id 
+          FROM push_subscriptions ps
+          JOIN group_members gm ON ps.user_id = gm.user_id
+          WHERE gm.group_id = ? AND ps.user_id != ?
+        `).all(groupId, userIdExempt);
+        
+        const sendPromises = subscriptions.map(subRow => {
+          const sub = JSON.parse(subRow.subscription);
+          return webpush.sendNotification(sub, payload).catch(err => {
+            if (err.statusCode === 410 || err.statusCode === 404) {
+              db.prepare('DELETE FROM push_subscriptions WHERE user_id = ? AND subscription = ?')
+                .run(subRow.user_id, subRow.subscription);
+            }
+          });
+        });
+        
+        await Promise.allSettled(sendPromises);
+    } catch (err) {
+        console.error('Error sending push notification:', err);
+    }
+}
+
 async function checkAndSendFirstAnswerPush(groupId, dailyQuestionId, userIdExempt) {
     try {
         // Check if this was the very first answer for this daily question
@@ -15,35 +41,34 @@ async function checkAndSendFirstAnswerPush(groupId, dailyQuestionId, userIdExemp
             const group = db.prepare('SELECT name FROM groups WHERE id = ?').get(groupId);
             const groupName = group ? group.name : 'Most Likely To';
             
-            const payload = JSON.stringify({
+            await sendPushToGroupMembers(groupId, userIdExempt, {
               title: groupName,
               body: `${user.username} hat gerade gespielt!`,
-              url: `/groups/${groupId}`
+              url: `/group/${groupId}`
             });
-            
-            const subscriptions = db.prepare(`
-              SELECT ps.subscription, ps.user_id 
-              FROM push_subscriptions ps
-              JOIN group_members gm ON ps.user_id = gm.user_id
-              WHERE gm.group_id = ? AND ps.user_id != ?
-            `).all(groupId, userIdExempt);
-            
-            const sendPromises = subscriptions.map(subRow => {
-              const sub = JSON.parse(subRow.subscription);
-              return webpush.sendNotification(sub, payload).catch(err => {
-                if (err.statusCode === 410 || err.statusCode === 404) {
-                  db.prepare('DELETE FROM push_subscriptions WHERE user_id = ? AND subscription = ?')
-                    .run(subRow.user_id, subRow.subscription);
-                }
-              });
-            });
-            
-            await Promise.allSettled(sendPromises);
         }
     } catch (err) {
         console.error('Error sending push notification:', err);
     }
 }
+
+async function sendCommentPush(groupId, userIdExempt) {
+    try {
+        const user = db.prepare('SELECT username FROM users WHERE id = ?').get(userIdExempt);
+        if (!user) return;
+        const group = db.prepare('SELECT name FROM groups WHERE id = ?').get(groupId);
+        const groupName = group ? group.name : 'Most Likely To';
+
+        await sendPushToGroupMembers(groupId, userIdExempt, {
+          title: groupName,
+          body: `${user.username} hat einen Kommentar geschrieben.`,
+          url: `/group/${groupId}`
+        });
+    } catch (err) {
+        console.error('Error sending comment push notification:', err);
+    }
+}
+
 
 // Helper: get today's date string in Europe/Berlin timezone (YYYY-MM-DD)
 const getTodayBerlin = () => {
@@ -572,6 +597,9 @@ router.post('/comments/:dqid', requireAnsweredToday, (req, res) => {
             WHERE c.id = ?
         `).get(result.lastInsertRowid);
         
+        // Trigger push notification asynchronously
+        sendCommentPush(req.params.id, req.session.userId);
+
         res.json(comment);
     } catch (err) {
         res.status(500).json({ error: 'Server error' });

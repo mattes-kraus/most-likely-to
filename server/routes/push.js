@@ -61,7 +61,7 @@ router.post('/test/:groupId', async (req, res) => {
     const payload = JSON.stringify({
       title: 'Test Push-Benachrichtigung',
       body: 'Dies ist ein Test vom Gruppen-Admin!',
-      url: `/groups/${groupId}`
+      url: `/group/${groupId}`
     });
 
     const sendPromises = subscriptions.map(subRow => {

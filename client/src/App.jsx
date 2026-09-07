@@ -27,7 +27,9 @@ function App() {
           <Route path="/reset-password/:token" element={<ResetPassword />} />
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/group/:id" element={<ProtectedRoute><Group /></ProtectedRoute>} />
+          <Route path="/groups/:id" element={<ProtectedRoute><Group /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

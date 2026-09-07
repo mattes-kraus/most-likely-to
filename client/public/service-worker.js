@@ -24,9 +24,24 @@ self.addEventListener('push', function(event) {
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
   
-  if (event.notification.data && event.notification.data.url) {
-    event.waitUntil(
-      clients.openWindow(event.notification.data.url)
-    );
-  }
+  const targetUrl = (event.notification.data && event.notification.data.url) || '/';
+  const urlToOpen = new URL(targetUrl, self.location.origin).href;
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
+      for (let i = 0; i < clientList.length; i++) {
+        const client = clientList[i];
+        if (client.url && 'focus' in client) {
+          return client.focus().then(() => {
+            if ('navigate' in client) {
+              return client.navigate(urlToOpen);
+            }
+          });
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(urlToOpen);
+      }
+    })
+  );
 });

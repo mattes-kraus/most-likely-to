@@ -20,6 +20,7 @@ class BetterSqlite3Store extends session.Store {
 
     this._get = this.db.prepare('SELECT sess FROM sessions WHERE sid = ? AND expired > ?');
     this._set = this.db.prepare('INSERT OR REPLACE INTO sessions (sid, sess, expired) VALUES (?, ?, ?)');
+    this._touch = this.db.prepare('UPDATE sessions SET expired = ? WHERE sid = ?');
     this._destroy = this.db.prepare('DELETE FROM sessions WHERE sid = ?');
     this._cleanup = this.db.prepare('DELETE FROM sessions WHERE expired < ?');
 
@@ -45,6 +46,17 @@ class BetterSqlite3Store extends session.Store {
       const maxAge = sess.cookie?.maxAge || 86400000;
       const expired = Date.now() + maxAge;
       this._set.run(sid, JSON.stringify(sess), expired);
+      cb?.(null);
+    } catch (err) {
+      cb?.(err);
+    }
+  }
+
+  touch(sid, sess, cb) {
+    try {
+      const maxAge = sess.cookie?.maxAge || 86400000;
+      const expired = Date.now() + maxAge;
+      this._touch.run(expired, sid);
       cb?.(null);
     } catch (err) {
       cb?.(err);
