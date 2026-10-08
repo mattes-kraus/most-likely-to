@@ -193,7 +193,11 @@ const assignDailyQuestion = (groupId, dayNumber) => {
         SELECT id, text, type FROM questions 
         WHERE (group_id IS NULL OR group_id = ?)
         AND id NOT IN (
-          SELECT question_id FROM daily_questions WHERE group_id = ?
+          SELECT dq.question_id FROM daily_questions dq 
+          WHERE dq.group_id = ? AND (
+            EXISTS (SELECT 1 FROM votes v WHERE v.daily_question_id = dq.id) OR
+            EXISTS (SELECT 1 FROM answers a WHERE a.daily_question_id = dq.id)
+          )
         )
         ORDER BY (group_id IS NULL) ASC, RANDOM() LIMIT 1
       `).get(groupId, groupId);
@@ -474,7 +478,13 @@ router.get('/history', requireAnsweredToday, (req, res) => {
 router.get('/custom-questions', requireAnsweredToday, (req, res) => {
     const groupId = req.params.id;
     const questions = db.prepare(`
-        SELECT q.id, q.text, q.type, q.created_by, u.username as created_by_name
+        SELECT q.id, q.text, q.type, q.created_by, u.username as created_by_name,
+               EXISTS(
+                 SELECT 1 FROM daily_questions dq 
+                 LEFT JOIN votes v ON dq.id = v.daily_question_id 
+                 LEFT JOIN answers a ON dq.id = a.daily_question_id 
+                 WHERE dq.question_id = q.id AND (v.id IS NOT NULL OR a.id IS NOT NULL)
+               ) as is_used
         FROM questions q
         JOIN users u ON q.created_by = u.id
         WHERE q.group_id = ?
@@ -483,7 +493,8 @@ router.get('/custom-questions', requireAnsweredToday, (req, res) => {
     
     res.json(questions.map(q => ({
         ...q,
-        isOwn: q.created_by === req.session.userId
+        isOwn: q.created_by === req.session.userId,
+        isUsed: !!q.is_used
     })));
 });
 
@@ -518,9 +529,14 @@ router.put('/custom-questions/:qid', requireAnsweredToday, (req, res) => {
     if (!question) return res.status(404).json({ error: 'Question not found' });
     if (question.created_by !== req.session.userId) return res.status(403).json({ error: 'You can only edit your own questions' });
 
-    // Don't allow editing if already used in a daily question
-    const used = db.prepare('SELECT 1 FROM daily_questions WHERE question_id = ?').get(qid);
-    if (used) return res.status(400).json({ error: 'Cannot edit a question that has already been used' });
+    // Don't allow editing if already answered
+    const used = db.prepare(`
+      SELECT 1 FROM daily_questions dq 
+      LEFT JOIN votes v ON dq.id = v.daily_question_id 
+      LEFT JOIN answers a ON dq.id = a.daily_question_id 
+      WHERE dq.question_id = ? AND (v.id IS NOT NULL OR a.id IS NOT NULL)
+    `).get(qid);
+    if (used) return res.status(400).json({ error: 'Cannot edit a question that has already been answered' });
 
     if (!text || !text.trim()) return res.status(400).json({ error: 'Question text is required' });
     if (type && !['vote', 'open'].includes(type)) return res.status(400).json({ error: 'Type must be "vote" or "open"' });
@@ -545,11 +561,17 @@ router.delete('/custom-questions/:qid', requireAnsweredToday, (req, res) => {
     if (!question) return res.status(404).json({ error: 'Question not found' });
     if (question.created_by !== req.session.userId) return res.status(403).json({ error: 'You can only delete your own questions' });
 
-    // Don't allow deleting if already used
-    const used = db.prepare('SELECT 1 FROM daily_questions WHERE question_id = ?').get(qid);
-    if (used) return res.status(400).json({ error: 'Cannot delete a question that has already been used' });
+    // Don't allow deleting if already answered
+    const used = db.prepare(`
+      SELECT 1 FROM daily_questions dq 
+      LEFT JOIN votes v ON dq.id = v.daily_question_id 
+      LEFT JOIN answers a ON dq.id = a.daily_question_id 
+      WHERE dq.question_id = ? AND (v.id IS NOT NULL OR a.id IS NOT NULL)
+    `).get(qid);
+    if (used) return res.status(400).json({ error: 'Cannot delete a question that has already been answered' });
 
     try {
+        db.prepare('DELETE FROM daily_questions WHERE question_id = ?').run(qid);
         db.prepare('DELETE FROM questions WHERE id = ?').run(qid);
         res.json({ success: true });
     } catch (err) {

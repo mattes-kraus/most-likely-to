@@ -15,6 +15,35 @@ function urlBase64ToUint8Array(base64String) {
   return outputArray;
 }
 
+export async function registerServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    try {
+      return await navigator.serviceWorker.register('/service-worker.js');
+    } catch (err) {
+      console.error('Service worker registration failed:', err);
+    }
+  }
+}
+
+export async function clearActiveNotifications() {
+  if ('serviceWorker' in navigator) {
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      if (registration && registration.getNotifications) {
+        const notifications = await registration.getNotifications();
+        notifications.forEach((notification) => {
+          notification.close();
+        });
+      }
+      if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({ action: 'clearNotifications' });
+      }
+    } catch (err) {
+      console.error('Error clearing active notifications:', err);
+    }
+  }
+}
+
 export async function subscribeToPushNotifications() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
     throw new Error('Push notifications are not supported by this browser.');
@@ -27,7 +56,7 @@ export async function subscribeToPushNotifications() {
   }
 
   // Register Service Worker
-  const registration = await navigator.serviceWorker.register('/service-worker.js');
+  const registration = await registerServiceWorker();
   
   // Wait for it to be active
   await navigator.serviceWorker.ready;

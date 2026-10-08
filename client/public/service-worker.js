@@ -1,3 +1,11 @@
+self.addEventListener('install', function(event) {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', function(event) {
+  event.waitUntil(self.clients.claim());
+});
+
 self.addEventListener('push', function(event) {
   if (event.data) {
     try {
@@ -28,20 +36,44 @@ self.addEventListener('notificationclick', function(event) {
   const urlToOpen = new URL(targetUrl, self.location.origin).href;
 
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
+    (async function() {
+      try {
+        if (self.registration && self.registration.getNotifications) {
+          const notifications = await self.registration.getNotifications();
+          notifications.forEach(function(n) {
+            n.close();
+          });
+        }
+      } catch (e) {
+        console.error('Error closing notifications on click', e);
+      }
+
+      const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true });
       for (let i = 0; i < clientList.length; i++) {
         const client = clientList[i];
         if (client.url && 'focus' in client) {
-          return client.focus().then(() => {
-            if ('navigate' in client) {
-              return client.navigate(urlToOpen);
-            }
-          });
+          await client.focus();
+          if ('navigate' in client) {
+            return client.navigate(urlToOpen);
+          }
+          return;
         }
       }
       if (clients.openWindow) {
         return clients.openWindow(urlToOpen);
       }
-    })
+    })()
   );
+});
+
+self.addEventListener('message', function(event) {
+  if (event.data && event.data.action === 'clearNotifications') {
+    if (self.registration && self.registration.getNotifications) {
+      self.registration.getNotifications().then(function(notifications) {
+        notifications.forEach(function(notification) {
+          notification.close();
+        });
+      });
+    }
+  }
 });

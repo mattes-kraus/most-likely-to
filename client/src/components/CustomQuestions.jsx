@@ -234,22 +234,33 @@ export default function CustomQuestions({ groupId, onClose }) {
                     
                     {q.isOwn && (
                       <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-                        <button
-                          onClick={() => startEdit(q)}
-                          className="btn-secondary"
-                          style={{ width: 'auto', padding: '4px 10px', fontSize: '0.8rem' }}
-                          title="Edit"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={() => handleDelete(q.id)}
-                          className="btn-secondary"
-                          style={{ width: 'auto', padding: '4px 10px', fontSize: '0.8rem', borderColor: 'rgba(244, 63, 94, 0.3)' }}
-                          title="Delete"
-                        >
-                          🗑️
-                        </button>
+                        {q.isUsed ? (
+                          <span
+                            title="Already played"
+                            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 8px', fontSize: '1rem' }}
+                          >
+                            ✅
+                          </span>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => startEdit(q)}
+                              className="btn-secondary"
+                              style={{ width: 'auto', padding: '4px 10px', fontSize: '0.8rem' }}
+                              title="Edit"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              onClick={() => handleDelete(q.id)}
+                              className="btn-secondary"
+                              style={{ width: 'auto', padding: '4px 10px', fontSize: '0.8rem', borderColor: 'rgba(244, 63, 94, 0.3)' }}
+                              title="Delete"
+                            >
+                              🗑️
+                            </button>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
