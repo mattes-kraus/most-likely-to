@@ -400,6 +400,14 @@ export default function Profile() {
                           >
                             ✍️ Open
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditType('guess')}
+                            className={editType === 'guess' ? '' : 'btn-secondary'}
+                            style={{ width: 'auto', padding: '4px 12px', fontSize: '0.8rem' }}
+                          >
+                            🔍 Guess
+                          </button>
                         </div>
                         <input
                           type="text"
@@ -439,7 +447,7 @@ export default function Profile() {
                               background: q.type === 'vote' ? 'rgba(99, 102, 241, 0.2)' : 'rgba(6, 182, 212, 0.2)',
                               color: q.type === 'vote' ? 'var(--primary-start)' : 'var(--secondary)',
                             }}>
-                              {q.type === 'vote' ? '🗳️ Vote' : '✍️ Open'}
+                              {q.type === 'vote' ? '🗳️ Vote' : q.type === 'guess' ? '🔍 Guess' : '✍️ Open'}
                             </span>
                           </div>
                           <p style={{ margin: 0, lineHeight: 1.5, fontSize: '1.05rem' }}>{q.text}</p>

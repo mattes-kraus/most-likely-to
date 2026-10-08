@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS group_members (
 CREATE TABLE IF NOT EXISTS questions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   text TEXT NOT NULL,
-  type TEXT NOT NULL CHECK(type IN ('vote', 'open')),
+  type TEXT NOT NULL CHECK(type IN ('vote', 'open', 'guess')),
   group_id INTEGER REFERENCES groups(id) DEFAULT NULL,
   created_by INTEGER REFERENCES users(id) DEFAULT NULL
 );
@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS answers (
   daily_question_id INTEGER REFERENCES daily_questions(id),
   user_id INTEGER REFERENCES users(id),
   answer_text TEXT NOT NULL,
+  is_correct INTEGER NOT NULL DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(daily_question_id, user_id)
 );
@@ -107,6 +108,32 @@ try {
 } catch (e) { /* column already exists */ }
 
 
+// Migration: allow 'guess' question type (SQLite can't alter CHECK constraints, so rebuild the table)
+const questionsSchema = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'questions'").get();
+if (questionsSchema && !questionsSchema.sql.includes("'guess'")) {
+  db.pragma('foreign_keys = OFF');
+  db.transaction(() => {
+    db.exec(`
+      CREATE TABLE questions_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        text TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('vote', 'open', 'guess')),
+        group_id INTEGER REFERENCES groups(id) DEFAULT NULL,
+        created_by INTEGER REFERENCES users(id) DEFAULT NULL
+      );
+      INSERT INTO questions_new (id, text, type, group_id, created_by)
+        SELECT id, text, type, group_id, created_by FROM questions;
+      DROP TABLE questions;
+      ALTER TABLE questions_new RENAME TO questions;
+    `);
+  })();
+  db.pragma('foreign_keys = ON');
+}
+
+// Migration: guessed answers can be marked correct by the featured member
+try {
+  db.exec(`ALTER TABLE answers ADD COLUMN is_correct INTEGER NOT NULL DEFAULT 0`);
+} catch (e) { /* column already exists */ }
 
 module.exports = db;
 

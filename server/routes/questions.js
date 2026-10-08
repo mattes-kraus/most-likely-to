@@ -29,6 +29,32 @@ async function sendPushToGroupMembers(groupId, userIdExempt, payloadObj) {
     }
 }
 
+async function sendPushToUser(userId, payloadObj) {
+    try {
+        const payload = JSON.stringify(payloadObj);
+        const subscriptions = db.prepare('SELECT subscription FROM push_subscriptions WHERE user_id = ?').all(userId);
+        await Promise.allSettled(subscriptions.map(subRow =>
+            webpush.sendNotification(JSON.parse(subRow.subscription), payload).catch(err => {
+                if (err.statusCode === 410 || err.statusCode === 404) {
+                    db.prepare('DELETE FROM push_subscriptions WHERE user_id = ? AND subscription = ?')
+                      .run(userId, subRow.subscription);
+                }
+            })
+        ));
+    } catch (err) {
+        console.error('Error sending push notification:', err);
+    }
+}
+
+async function sendGuessFeaturedPush(groupId, featuredMemberId) {
+    const group = db.prepare('SELECT name FROM groups WHERE id = ?').get(groupId);
+    await sendPushToUser(featuredMemberId, {
+      title: group ? group.name : 'Most Likely To',
+      body: 'Heute dreht sich alles um dich! Die anderen raten deine Antwort.',
+      url: `/group/${groupId}`
+    });
+}
+
 async function checkAndSendFirstAnswerPush(groupId, dailyQuestionId, userIdExempt) {
     try {
         // Check if this was the very first answer for this daily question
@@ -69,6 +95,22 @@ async function sendCommentPush(groupId, userIdExempt) {
     }
 }
 
+
+// Points per member for correctly guessed answers in this group (without the member the question is about)
+const getGuessLeaderboard = (groupId, featuredMemberId) => {
+    return db.prepare(`
+        SELECT u.id, u.username, u.avatar_url,
+               COALESCE((
+                 SELECT SUM(a.is_correct) FROM answers a
+                 JOIN daily_questions dq ON a.daily_question_id = dq.id
+                 WHERE dq.group_id = gm.group_id AND a.user_id = u.id
+               ), 0) as points
+        FROM users u
+        JOIN group_members gm ON u.id = gm.user_id
+        WHERE gm.group_id = ? AND u.id IS NOT ?
+        ORDER BY points DESC, u.username ASC
+    `).all(groupId, featuredMemberId);
+};
 
 // Helper: get today's date string in Europe/Berlin timezone (YYYY-MM-DD)
 const getTodayBerlin = () => {
@@ -206,7 +248,21 @@ const assignDailyQuestion = (groupId, dayNumber) => {
     if (unusedQuestion) {
       // If the question uses [MEMBER], pick a random member now and lock it in
       let featuredMemberId = null;
-      if (unusedQuestion.type === 'open' && unusedQuestion.text.includes('[MEMBER]')) {
+      if (unusedQuestion.type === 'guess') {
+        // Pick whoever has been in the spotlight the least, so everyone gets their turn
+        const member = db.prepare(`
+          SELECT u.id FROM users u
+          JOIN group_members gm ON u.id = gm.user_id
+          WHERE gm.group_id = ?
+          ORDER BY (
+            SELECT COUNT(*) FROM daily_questions dq
+            JOIN questions q ON dq.question_id = q.id
+            WHERE dq.group_id = gm.group_id AND q.type = 'guess' AND dq.featured_member_id = u.id
+          ) ASC, RANDOM()
+          LIMIT 1
+        `).get(groupId);
+        if (member) featuredMemberId = member.id;
+      } else if (unusedQuestion.type === 'open' && unusedQuestion.text.includes('[MEMBER]')) {
         const members = db.prepare(`
           SELECT u.id FROM users u
           JOIN group_members gm ON u.id = gm.user_id
@@ -220,6 +276,9 @@ const assignDailyQuestion = (groupId, dayNumber) => {
 
       const info = db.prepare('INSERT INTO daily_questions (group_id, question_id, day_number, featured_member_id) VALUES (?, ?, ?, ?)')
         .run(groupId, unusedQuestion.id, dayNumber, featuredMemberId);
+      if (unusedQuestion.type === 'guess' && featuredMemberId) {
+        sendGuessFeaturedPush(groupId, featuredMemberId);
+      }
       return info.lastInsertRowid;
     }
     return null;
@@ -260,7 +319,7 @@ router.get('/today', (req, res) => {
     WHERE gm.group_id = ?
   `).all(groupId);
 
-  if (dailyQuestion.type === 'open' && dailyQuestion.text.includes('[MEMBER]')) {
+  if (dailyQuestion.type !== 'vote' && dailyQuestion.text.includes('[MEMBER]')) {
       // Use stored featured_member_id if available, otherwise fall back to calculation
       let featuredMember;
       if (dailyQuestion.featured_member_id) {
@@ -297,7 +356,7 @@ router.get('/today', (req, res) => {
     hasVoted = !!answer;
     if (hasVoted) {
         results = db.prepare(`
-            SELECT a.user_id, a.answer_text, u.username, u.avatar_url
+            SELECT a.id, a.user_id, a.answer_text, a.is_correct, u.username, u.avatar_url
             FROM answers a
             JOIN users u ON a.user_id = u.id
             WHERE a.daily_question_id = ?
@@ -309,7 +368,11 @@ router.get('/today', (req, res) => {
       dailyQuestion,
       hasVoted,
       results,
-      members: dailyQuestion.type === 'vote' ? members : undefined
+      members: dailyQuestion.type === 'vote' ? members : undefined,
+      featuredMember: dailyQuestion.type === 'guess'
+        ? members.find(m => m.id === dailyQuestion.featured_member_id)
+        : undefined,
+      leaderboard: dailyQuestion.type === 'guess' && hasVoted ? getGuessLeaderboard(groupId, dailyQuestion.featured_member_id) : undefined
   });
 });
 
@@ -361,7 +424,7 @@ router.post('/answer', (req, res) => {
         WHERE dq.group_id = ? AND dq.day_number = ?
     `).get(groupId, currentDay);
 
-    if (!dailyQuestion || dailyQuestion.type !== 'open') return res.status(400).json({ error: 'Invalid question' });
+    if (!dailyQuestion || dailyQuestion.type === 'vote') return res.status(400).json({ error: 'Invalid question' });
 
     try {
         db.prepare('INSERT INTO answers (daily_question_id, user_id, answer_text) VALUES (?, ?, ?)')
@@ -375,6 +438,30 @@ router.post('/answer', (req, res) => {
         if (err.message.includes('UNIQUE')) return res.status(400).json({ error: 'Already answered' });
         res.status(500).json({ error: 'Server error' });
     }
+});
+
+// ── Guess: mark answers correct ───────────────────────────────
+
+router.post('/answers/:answerId/correct', (req, res) => {
+    const groupId = req.params.id;
+    const { isCorrect } = req.body;
+
+    const answer = db.prepare(`
+        SELECT a.id, a.user_id, dq.featured_member_id, q.type
+        FROM answers a
+        JOIN daily_questions dq ON a.daily_question_id = dq.id
+        JOIN questions q ON dq.question_id = q.id
+        WHERE a.id = ? AND dq.group_id = ?
+    `).get(req.params.answerId, groupId);
+
+    if (!answer || answer.type !== 'guess') return res.status(404).json({ error: 'Answer not found' });
+    if (answer.featured_member_id !== req.session.userId) {
+        return res.status(403).json({ error: 'Only the person this question is about can mark guesses' });
+    }
+    if (answer.user_id === req.session.userId) return res.status(400).json({ error: 'Cannot mark your own answer' });
+
+    db.prepare('UPDATE answers SET is_correct = ? WHERE id = ?').run(isCorrect ? 1 : 0, answer.id);
+    res.json({ success: true });
 });
 
 // ── Skip day ──────────────────────────────────────────────────
@@ -427,7 +514,7 @@ router.get('/history', requireAnsweredToday, (req, res) => {
 
     const history = pastQuestions.map(dq => {
         let questionText = dq.text;
-        if (dq.type === 'open' && questionText.includes('[MEMBER]')) {
+        if (dq.type !== 'vote' && questionText.includes('[MEMBER]')) {
             let featuredMember;
             if (dq.featured_member_id) {
               const stored = db.prepare('SELECT username FROM users WHERE id = ?').get(dq.featured_member_id);
@@ -452,7 +539,7 @@ router.get('/history', requireAnsweredToday, (req, res) => {
             `).all(dq.id);
         } else {
             results = db.prepare(`
-                SELECT a.user_id, a.answer_text, u.username, u.avatar_url
+                SELECT a.id, a.user_id, a.answer_text, a.is_correct, u.username, u.avatar_url
                 FROM answers a
                 JOIN users u ON a.user_id = u.id
                 WHERE a.daily_question_id = ?
@@ -465,6 +552,7 @@ router.get('/history', requireAnsweredToday, (req, res) => {
             created_at: dq.created_at,
             text: questionText,
             type: dq.type,
+            featured_member_id: dq.featured_member_id,
             results
         };
     });
@@ -504,7 +592,8 @@ router.post('/custom-questions', requireAnsweredToday, (req, res) => {
     const { text, type } = req.body;
     
     if (!text || !text.trim()) return res.status(400).json({ error: 'Question text is required' });
-    if (!type || !['vote', 'open'].includes(type)) return res.status(400).json({ error: 'Type must be "vote" or "open"' });
+    if (!type || !['vote', 'open', 'guess'].includes(type)) return res.status(400).json({ error: 'Type must be "vote", "open" or "guess"' });
+    if (type === 'guess' && !text.includes('[MEMBER]')) return res.status(400).json({ error: 'Guess questions must contain [MEMBER]' });
 
     try {
         const result = db.prepare('INSERT INTO questions (text, type, group_id, created_by) VALUES (?, ?, ?, ?)')
@@ -539,7 +628,8 @@ router.put('/custom-questions/:qid', requireAnsweredToday, (req, res) => {
     if (used) return res.status(400).json({ error: 'Cannot edit a question that has already been answered' });
 
     if (!text || !text.trim()) return res.status(400).json({ error: 'Question text is required' });
-    if (type && !['vote', 'open'].includes(type)) return res.status(400).json({ error: 'Type must be "vote" or "open"' });
+    if (type && !['vote', 'open', 'guess'].includes(type)) return res.status(400).json({ error: 'Type must be "vote", "open" or "guess"' });
+    if ((type || question.type) === 'guess' && !text.includes('[MEMBER]')) return res.status(400).json({ error: 'Guess questions must contain [MEMBER]' });
 
     try {
         db.prepare('UPDATE questions SET text = ?, type = ? WHERE id = ?')

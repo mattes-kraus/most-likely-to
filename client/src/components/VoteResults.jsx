@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import MemberBadge from './MemberBadge';
 
-export default function VoteResults({ results, type, members }) {
+export default function VoteResults({ results, type, members, featuredMember, canMarkCorrect, onMarkCorrect, leaderboard }) {
   const [animate, setAnimate] = useState(false);
   
   useEffect(() => {
@@ -53,6 +53,91 @@ export default function VoteResults({ results, type, members }) {
             </div>
           );
         })}
+      </div>
+    );
+  }
+
+  if (type === 'guess') {
+    const truth = results.find(r => r.user_id === featuredMember?.id);
+    const guesses = results.filter(r => r.user_id !== featuredMember?.id);
+    const correctCount = guesses.filter(r => r.is_correct).length;
+
+    return (
+      <div style={{ display: 'grid', gap: '16px', marginTop: '24px' }}>
+        <div className="card animate-in" style={{ padding: '16px', border: '1px solid #f59e0b' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+            <MemberBadge username={featuredMember?.username} avatarUrl={featuredMember?.avatar_url} size={24} />
+            <span style={{ fontWeight: 600 }}>✨ {featuredMember?.username}'s answer</span>
+          </div>
+          <div className="theme-box" style={{ color: truth ? 'var(--text-primary)' : 'var(--text-secondary)', lineHeight: 1.5, padding: '12px', borderRadius: '8px', fontStyle: truth ? 'normal' : 'italic' }}>
+            {truth ? truth.answer_text : `Waiting for ${featuredMember?.username || 'them'} to answer...`}
+          </div>
+        </div>
+
+        {guesses.length === 0 ? (
+          <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '8px' }}>No guesses yet.</div>
+        ) : (
+          <>
+            {canMarkCorrect && (
+              <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                Tap the guesses that are right – each one is worth a point.
+              </div>
+            )}
+            {guesses.map((result, index) => (
+              <div key={result.user_id || index} className="card animate-in" style={{
+                animationDelay: `${index * 0.1}s`,
+                padding: '16px',
+                border: result.is_correct ? '1px solid #22c55e' : undefined
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <MemberBadge username={result.username} avatarUrl={result.avatar_url} size={24} />
+                    <span style={{ fontWeight: 600 }}>{result.username}</span>
+                  </div>
+                  {canMarkCorrect ? (
+                    <button
+                      onClick={() => onMarkCorrect(result.id, !result.is_correct)}
+                      className={result.is_correct ? '' : 'btn-secondary'}
+                      style={{ width: 'auto', padding: '4px 12px', fontSize: '0.8rem' }}
+                    >
+                      {result.is_correct ? '✓ Correct' : 'Mark correct'}
+                    </button>
+                  ) : result.is_correct ? (
+                    <span style={{ color: '#22c55e', fontWeight: 600, fontSize: '0.9rem' }}>✓ Correct</span>
+                  ) : null}
+                </div>
+                <div className="theme-box" style={{ color: 'var(--text-primary)', lineHeight: 1.5, padding: '12px', borderRadius: '8px' }}>
+                  {result.answer_text}
+                </div>
+              </div>
+            ))}
+            {truth && !canMarkCorrect && (
+              <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                {correctCount} of {guesses.length} {guesses.length === 1 ? 'guess' : 'guesses'} marked correct by {featuredMember?.username}
+              </div>
+            )}
+          </>
+        )}
+
+        {leaderboard && leaderboard.length > 0 && (
+          <div className="card animate-in" style={{ padding: '16px' }}>
+            <div style={{ fontWeight: 600, marginBottom: '12px' }}>🏆 Who knows the family best?</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {leaderboard.map((m, index) => (
+                <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ width: '20px', color: 'var(--text-secondary)' }}>{index + 1}.</span>
+                    <MemberBadge username={m.username} avatarUrl={m.avatar_url} size={24} />
+                    <span>{m.username} {index === 0 && m.points > 0 && '👑'}</span>
+                  </div>
+                  <span style={{ fontWeight: 'bold', color: 'var(--text-secondary)' }}>
+                    {m.points} {m.points === 1 ? 'point' : 'points'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   }

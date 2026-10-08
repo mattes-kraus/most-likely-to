@@ -138,7 +138,39 @@ const seedData = () => {
     { text: "Welches Familienrezept muss unbedingt weitergegeben werden?", type: 'open' },
     { text: "Was ist euer Lieblingsspiel für einen Familienabend?", type: 'open' },
     { text: "Wenn unsere Familie eine Band wäre: Wie würde sie heißen?", type: 'open' },
-    { text: "Welche Serie beschreibt unsere Familie am besten?", type: 'open' }
+    { text: "Welche Serie beschreibt unsere Familie am besten?", type: 'open' },
+
+    // Wie gut kennst du ...? – the featured member answers, everyone else guesses
+    { text: "Was ist [MEMBER]s absolutes Lieblingsessen?", type: 'guess' },
+    { text: "Welches Essen würde [MEMBER] niemals anrühren?", type: 'guess' },
+    { text: "Was war [MEMBER]s Traumberuf als Kind?", type: 'guess' },
+    { text: "Was ist [MEMBER]s Lieblingsfilm?", type: 'guess' },
+    { text: "Welche Serie schaut [MEMBER] gerade?", type: 'guess' },
+    { text: "Wohin würde [MEMBER] sofort reisen, wenn Geld keine Rolle spielt?", type: 'guess' },
+    { text: "Wovor hat [MEMBER] am meisten Angst?", type: 'guess' },
+    { text: "Was ist [MEMBER]s Lieblingssüßigkeit?", type: 'guess' },
+    { text: "Welche App öffnet [MEMBER] am häufigsten?", type: 'guess' },
+    { text: "Was ist [MEMBER]s Lieblingsjahreszeit?", type: 'guess' },
+    { text: "Was bestellt [MEMBER] beim Italiener?", type: 'guess' },
+    { text: "Was ist [MEMBER]s Lieblingsfarbe?", type: 'guess' },
+    { text: "Welches Lied singt [MEMBER] am liebsten mit?", type: 'guess' },
+    { text: "Was ist [MEMBER]s schönste Kindheitserinnerung?", type: 'guess' },
+    { text: "Was nervt [MEMBER] am meisten?", type: 'guess' },
+    { text: "Welches Tier hätte [MEMBER] am liebsten als Haustier?", type: 'guess' },
+    { text: "Was trinkt [MEMBER] morgens als Erstes?", type: 'guess' },
+    { text: "Was ist [MEMBER]s Lieblingsbuch?", type: 'guess' },
+    { text: "Was würde [MEMBER] mit einem freien Tag ohne Verpflichtungen machen?", type: 'guess' },
+    { text: "Welche berühmte Person würde [MEMBER] gerne einmal treffen?", type: 'guess' },
+    { text: "Was war [MEMBER]s erstes Auto oder Fahrrad?", type: 'guess' },
+    { text: "Was ist [MEMBER]s Lieblingsgericht von Mama oder Papa?", type: 'guess' },
+    { text: "Was kauft [MEMBER] immer, wenn er/sie im Supermarkt ist?", type: 'guess' },
+    { text: "Welches Talent hätte [MEMBER] gerne?", type: 'guess' },
+    { text: "Was ist [MEMBER]s Lieblingsort in der Heimat?", type: 'guess' },
+    { text: "Was war das schönste Urlaubsziel für [MEMBER]?", type: 'guess' },
+    { text: "Wie viele Stunden schläft [MEMBER] am liebsten?", type: 'guess' },
+    { text: "Was ist [MEMBER]s größte Schwäche beim Essen?", type: 'guess' },
+    { text: "Welches Spiel spielt [MEMBER] am liebsten?", type: 'guess' },
+    { text: "Was würde [MEMBER] als Erstes retten, wenn es brennt (außer Menschen und Tieren)?", type: 'guess' }
   ];
 
   const added = transaction(questions);

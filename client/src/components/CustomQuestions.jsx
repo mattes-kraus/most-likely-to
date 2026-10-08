@@ -121,13 +121,23 @@ export default function CustomQuestions({ groupId, onClose }) {
           >
             ✍️ Open
           </button>
+          <button
+            type="button"
+            onClick={() => setType('guess')}
+            className={type === 'guess' ? '' : 'btn-secondary'}
+            style={{ width: 'auto', padding: '8px 16px', fontSize: '0.85rem' }}
+          >
+            🔍 Guess
+          </button>
         </div>
         
         <input
           type="text"
           placeholder={type === 'vote' 
             ? 'e.g. Who is most likely to sleep through an alarm?' 
-            : 'e.g. [MEMBER] just got kicked out of IKEA. What happened?'}
+            : type === 'guess'
+              ? "e.g. What is [MEMBER]'s favourite food?"
+              : 'e.g. [MEMBER] just got kicked out of IKEA. What happened?'}
           value={text}
           onChange={e => setText(e.target.value)}
           style={{ marginBottom: '12px' }}
@@ -136,6 +146,11 @@ export default function CustomQuestions({ groupId, onClose }) {
         {type === 'open' && (
           <p style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', marginTop: '-8px', marginBottom: '12px' }}>
             💡 Use [MEMBER] to insert a random group member's name
+          </p>
+        )}
+        {type === 'guess' && (
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', marginTop: '-8px', marginBottom: '12px' }}>
+            💡 Use [MEMBER] for the person it's about – they answer, everyone else guesses
           </p>
         )}
         
@@ -184,6 +199,14 @@ export default function CustomQuestions({ groupId, onClose }) {
                       >
                         ✍️ Open
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditType('guess')}
+                        className={editType === 'guess' ? '' : 'btn-secondary'}
+                        style={{ width: 'auto', padding: '4px 12px', fontSize: '0.8rem' }}
+                      >
+                        🔍 Guess
+                      </button>
                     </div>
                     <input
                       type="text"
@@ -223,7 +246,7 @@ export default function CustomQuestions({ groupId, onClose }) {
                           background: q.type === 'vote' ? 'rgba(99, 102, 241, 0.2)' : 'rgba(6, 182, 212, 0.2)',
                           color: q.type === 'vote' ? 'var(--primary-start)' : 'var(--secondary)',
                         }}>
-                          {q.type === 'vote' ? '🗳️ Vote' : '✍️ Open'}
+                          {q.type === 'vote' ? '🗳️ Vote' : q.type === 'guess' ? '🔍 Guess' : '✍️ Open'}
                         </span>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
                           by {q.created_by_name}

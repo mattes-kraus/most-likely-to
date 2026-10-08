@@ -91,6 +91,18 @@ export default function Group() {
     }
   };
 
+  const handleMarkCorrect = async (answerId, isCorrect) => {
+    try {
+      await api(`/api/groups/${id}/answers/${answerId}/correct`, {
+        method: 'POST',
+        body: JSON.stringify({ isCorrect })
+      });
+      await fetchData(true);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
   const handleSkipDay = async () => {
     setActionLoading(true);
     try {
@@ -165,6 +177,14 @@ export default function Group() {
 
   const currentHasVoted = isHistoryView ? true : todayData?.hasVoted;
   const currentResults = isHistoryView ? history[historyIndex].results : todayData?.results;
+
+  // "How well do you know ...?" questions are about one featured member
+  const featuredMember = questionType === 'guess'
+    ? (isHistoryView
+        ? group?.members?.find(m => m.id === dq.featured_member_id)
+        : todayData?.featuredMember)
+    : null;
+  const isFeatured = !!featuredMember && featuredMember.id === user?.id;
 
   if (loading) {
     return <><Navbar /><div className="layout" style={{ display: 'flex', justifyContent: 'center', marginTop: '100px' }}><div className="spinner"></div></div></>;
@@ -279,6 +299,13 @@ export default function Group() {
               </div>
             )}
 
+            {featuredMember && (
+              <div style={{ textAlign: 'center', marginTop: '16px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <MemberBadge username={featuredMember.username} avatarUrl={featuredMember.avatar_url} size={28} />
+                <span>{isFeatured ? 'This one is about you!' : `How well do you know ${featuredMember.username}?`}</span>
+              </div>
+            )}
+
             <h2 className="gradient-text" style={{ fontSize: '2rem', textAlign: 'center', margin: '24px 0 40px', lineHeight: 1.3 }}>
               {dq.text}
             </h2>
@@ -289,6 +316,10 @@ export default function Group() {
                   results={currentResults} 
                   type={questionType} 
                   members={group?.members}
+                  featuredMember={featuredMember}
+                  canMarkCorrect={isFeatured}
+                  onMarkCorrect={handleMarkCorrect}
+                  leaderboard={isHistoryView ? null : todayData?.leaderboard}
                 />
                 <Comments groupId={id} dailyQuestionId={dq.id} />
               </div>
@@ -314,7 +345,9 @@ export default function Group() {
                     <textarea 
                       value={openAnswer}
                       onChange={e => setOpenAnswer(e.target.value)}
-                      placeholder="Type your answer here..."
+                      placeholder={questionType === 'guess'
+                        ? (isFeatured ? 'Your real answer – the others have to guess it...' : `What do you think ${featuredMember?.username} will answer?`)
+                        : 'Type your answer here...'}
                       style={{
                         width: '100%',
                         border: '1px solid var(--card-border)',
@@ -331,7 +364,7 @@ export default function Group() {
                       required
                     />
                     <button type="submit" disabled={actionLoading || !openAnswer.trim()}>
-                      Submit Answer
+                      {questionType === 'guess' && !isFeatured ? 'Submit Guess' : 'Submit Answer'}
                     </button>
                   </form>
                 )}
